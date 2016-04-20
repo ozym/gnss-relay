@@ -43,6 +43,9 @@ func main() {
 	var listener string
 	flag.StringVar(&listener, "listener", ":8855", "GNSS local listening address")
 
+	var timeout time.Duration
+	flag.DurationVar(&timeout, "timeout", time.Second, "Write timeout deadline")
+
 	var reap time.Duration
 	flag.DurationVar(&reap, "reap", time.Minute, "How often stale connections are purged")
 
@@ -66,7 +69,8 @@ func main() {
 				log.Fatalf("Unable to accept local connection: %v", err)
 			}
 			client := &Client{
-				conn: conn,
+				conn:    conn,
+				timeout: timeout,
 			}
 
 			log.Printf("Connection from: %s", client.String())

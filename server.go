@@ -19,16 +19,18 @@ func (e errors) Error() string {
 
 // Server handles the client connections.
 type Server struct {
-	mutex  *sync.RWMutex
-	ticker *time.Ticker
+	mutex     *sync.RWMutex
+	ticker    *time.Ticker
+	waitgroup *sync.WaitGroup
 
 	clients []*Client
 }
 
 func NewServer(reap time.Duration) *Server {
 	s := &Server{
-		mutex:  &sync.RWMutex{},
-		ticker: time.NewTicker(reap),
+		mutex:     &sync.RWMutex{},
+		ticker:    time.NewTicker(reap),
+		waitgroup: &sync.WaitGroup{},
 	}
 
 	go func() {
@@ -71,15 +73,25 @@ func (s *Server) Send(msg []byte) error {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
-	var errs []error
+	res := make(chan error)
 	for _, c := range s.clients {
-		if c.err != nil {
-			continue
-		}
-		if err := c.Send(msg); err != nil {
+		s.waitgroup.Add(1)
+		go func(client *Client) {
+			defer s.waitgroup.Done()
+			res <- c.Send(msg)
+		}(c)
+	}
+
+	var errs []error
+	go func() {
+		for err := range res {
 			errs = append(errs, err)
 		}
-	}
+	}()
+
+	s.waitgroup.Wait()
+
+	close(res)
 
 	if len(errs) > 0 {
 		return errors(errs)
